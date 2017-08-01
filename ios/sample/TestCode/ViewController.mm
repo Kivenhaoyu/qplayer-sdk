@@ -231,8 +231,8 @@ void NotifyEvent (void * pUserData, int nID, void * pValue1)
     _clipboardURL = nil;
     
 #if 0
-    [_urlList addObject:@"http://replay1.live.gulugulu.cn/2017-06-13_LFM.mp4"];
-    [_urlList addObject:@"http://100.100.32.24/pd/058-EminemiPodAd.mp4"];
+    [_urlList addObject:@"http://pili-media.meilihuli.com/recordings/z1.meili.product_239/app_product_239.mp4"];
+    [_urlList addObject:@"http://192.168.0.123/pd/058-EminemiPodAd.mp4"];
     [_urlList addObject:@"http://100.100.32.24/pd/dump.flv"];
     [_urlList addObject:@"https://ofmw8vyd3.qnssl.com/1461562925fetch/111.mp4"];
     [_urlList addObject:@"https://devimages.apple.com.edgekey.net/streaming/examples/bipbop_4x3/bipbop_4x3_variant.m3u8"];
@@ -375,7 +375,7 @@ void NotifyEvent (void * pUserData, int nID, void * pValue1)
     //Lable version
     width = 80;
     _labelVersion = [[UILabel alloc] initWithFrame:CGRectMake(_rectSmallScreen.size.width - width, _rectSmallScreen.origin.y+_rectSmallScreen.size.height + 50, width, 20)];
-    _labelVersion.text = [[[NSBundle mainBundle] infoDictionary] objectForKey:@"CFBundleShortVersionString"];//@"V1.0.0.0 B1";
+    _labelVersion.text = [self getVersion];//[[[NSBundle mainBundle] infoDictionary] objectForKey:@"CFBundleShortVersionString"];//@"V1.0.0.0 B1";
     _labelVersion.font = [UIFont systemFontOfSize:8];
     _labelVersion.textColor = [UIColor redColor];
     [_viewVideo addSubview:_labelVersion];
@@ -983,6 +983,19 @@ void NotifyEvent (void * pUserData, int nID, void * pValue1)
     _player.SetParam(_player.hPlayer, QCPLAY_PID_PD_Save_Path, (void*)[docPathDir UTF8String]);
     int nProtocol = QC_IOPROTOCOL_HTTPPD;
     _player.SetParam(_player.hPlayer, QCPLAY_PID_Prefer_Protocol, &nProtocol);
+}
+
+-(NSString*)getVersion
+{
+    QCM_Player player;
+    qcCreatePlayer(&player, NULL);
+    NSString* version = [NSString stringWithFormat:@"%d.%d.%d.%d",
+            (player.nVersion>>24) & 0xFF,
+            (player.nVersion>>16) & 0xFF,
+            (player.nVersion>>8) & 0xFF,
+            player.nVersion&0xFF];
+    qcDestroyPlayer(&player);
+    return version;
 }
 
 
