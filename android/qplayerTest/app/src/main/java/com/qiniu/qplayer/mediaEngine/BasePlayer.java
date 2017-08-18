@@ -106,6 +106,8 @@ public interface BasePlayer {
 	public static final int 	QC_MSG_SNKV_FIRST_FRAME 		= 0x15200001;
 	// The video was render, the param is timestamp.
 	public static final int 	QC_MSG_SNKV_RENDER		 		= 0x15200004;
+    // The video was rotate, the param is rotate angle.
+    public static final int 	QC_MSG_SNKV_ROTATE		 		= 0x15200005;
 	// The first frame audio was displayed.
 	public static final int 	QC_MSG_SNKA_FIRST_FRAME 		= 0x15100001;
 	// The audio was render, the param is timestamp.
@@ -174,6 +176,7 @@ public interface BasePlayer {
 
 
 	public static final int 	QC_FLAG_Video_CaptureImage		= 0x00000010;
+	public static final int 	QC_FLAG_Video_SEIDATA			= 0x00000020;
 	public static final int 	QC_FLAG_Video_YUV420P			= 0x00000000;
 
 	// The event listener function
