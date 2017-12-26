@@ -19,6 +19,8 @@ public interface BasePlayer {
 	public static final int		QCPLAY_FORMAT_M3U8			= 1;
 	public static final int		QCPLAY_FORMAT_MP4			= 2;
 	public static final int		QCPLAY_FORMAT_FLV			= 3;
+	public static final int		QCPLAY_FORMAT_MP3			= 5;
+	public static final int		QCPLAY_FORMAT_AAC			= 6;
 
 	public static final int		QC_IOPROTOCOL_HTTPPD 		= 5;
 
@@ -42,6 +44,11 @@ public interface BasePlayer {
 	public static final	int 	QCPLAY_PID_StreamNum		= 0X11000005;
 	public static final	int 	QCPLAY_PID_StreamPlay		= 0X11000006;
 	public static final	int 	QCPLAY_PID_StreamInfo		= 0X1100000F;
+
+	// the param should int array. the value should be divide by 4
+	// the value is left, top, right, bottom
+	public static final	int 	QCPLAY_PID_ZoomVideo		= 0X11000011;
+
 	public static final int 	QCPLAY_PID_Clock_OffTime	= 0X11000020;
 
 	// the param shoud null
@@ -63,8 +70,8 @@ public interface BasePlayer {
 	public static final int 	QCPLAY_PID_Prefer_Format	= 0X11000050;
 
 	// GetParam. Return the timestamp value.
-	public static final int		QCPLAY_PID_RTMP_AUDIO_MSG_TIMESTAMP		= 0x11010073;
-	public static final int		QCPLAY_PID_RTMP_VIDEO_MSG_TIMESTAMP		= 0x11010074;
+	public static final int		QCPLAY_PID_RTMP_AUDIO_MSG_TIMESTAMP		= 0x11000073;
+	public static final int		QCPLAY_PID_RTMP_VIDEO_MSG_TIMESTAMP		= 0x11000074;
 
 	// Set to capture video image
 	// The parameter should be long long * (ms). capture time. 0 is immediatily.
@@ -86,6 +93,10 @@ public interface BasePlayer {
 	// The parameter should be String. "127.0.0.1" use local server.
 	public static final int	QCPLAY_PID_DNS_SERVER				= 0X11000208;
 	
+	// Detect the host to get best IP
+	// The parameter should be String. "www.qiniu.com".
+	public static final int	QCPLAY_PID_DNS_DETECT				= 0X11000209;
+
 	// Set the max buffer time
 	// The parameter should be int (ms)
 	public static final int	QCPLAY_PID_PlayBuff_MaxTime			= 0X11000211;
@@ -112,7 +123,7 @@ public interface BasePlayer {
 	// Define id of event listener.
 	public static final int 	QC_MSG_PLAY_OPEN_DONE 			= 0x16000001;
 	public static final int 	QC_MSG_PLAY_OPEN_FAILED 		= 0x16000002;
-	// The nArg1 is 0 normal, 1 IO error
+	// The nArg1 0 is normal, 1 has error in IO.
 	public static final int 	QC_MSG_PLAY_COMPLETE 			= 0x16000007;
 	public static final int 	QC_MSG_PLAY_SEEK_DONE 			= 0x16000005;
 	public static final int 	QC_MSG_PLAY_SEEK_FAILED 		= 0x16000006;

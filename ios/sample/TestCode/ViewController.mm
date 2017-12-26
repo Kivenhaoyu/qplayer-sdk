@@ -41,6 +41,8 @@
     
     NSInteger		_networkConnectionErrorTime;
     NSString*		_clipboardURL;
+    BOOL			_loopPlayback;
+    int				_openStartTime;
 }
 @end
 
@@ -58,7 +60,7 @@ void NotifyEvent (void * pUserData, int nID, void * pValue1)
     //NSLog(@"[EVT]Recv event, %x\n", nID);
     if (nID == QC_MSG_PLAY_OPEN_DONE)
     {
-        NSLog(@"[EVT]Run\n");
+        NSLog(@"Open use time %d. %d", [self getSysTime]-_openStartTime, [self getSysTime]);
         if(_player.hPlayer)
             _player.Run(_player.hPlayer);
         [[NSOperationQueue mainQueue] addOperationWithBlock:^{
@@ -68,14 +70,17 @@ void NotifyEvent (void * pUserData, int nID, void * pValue1)
     }
     else if(nID == QC_MSG_PLAY_OPEN_FAILED)
     {
+        NSLog(@"Open use time %d. %d", [self getSysTime]-_openStartTime, [self getSysTime]);
         [[NSOperationQueue mainQueue] addOperationWithBlock:^{
             [self showMessage:@"Open fail" duration:2.0];
+            [self loopPlayback];
         }];
     }
     else if (nID == QC_MSG_PLAY_COMPLETE)
     {
         [[NSOperationQueue mainQueue] addOperationWithBlock:^{
-            [self onStop: _btnStart];
+            if(![self loopPlayback])
+                [self onStop: _btnStart];
         }];
     }
     else if (nID == QC_MSG_PLAY_SEEK_DONE)
@@ -118,6 +123,10 @@ void NotifyEvent (void * pUserData, int nID, void * pValue1)
     else if(nID == QC_MSG_SNKV_FIRST_FRAME)
     {
         NSLog(@"[EVT]First video frame rendered\n");
+    }
+    else if(nID == QC_MSG_SNKA_FIRST_FRAME)
+    {
+        NSLog(@"[EVT]First audio frame rendered\n");
     }
 }
 
@@ -183,6 +192,7 @@ void NotifyEvent (void * pUserData, int nID, void * pValue1)
 
 -(void)parseDemoLive
 {
+    //return;
     NSString *host = @"http://pili2-demo.qiniu.com";
     NSString *method = @"GET";
     
@@ -221,18 +231,41 @@ void NotifyEvent (void * pUserData, int nID, void * pValue1)
     
     _currURL = 0;
     _clipboardURL = nil;
-
-    [_urlList addObject:@"rtmp://live.hkstv.hk.lxdns.com/live/hks"];
-    [_urlList addObject:@"http://devimages.apple.com/iphone/samples/bipbop/bipbopall.m3u8"];
-    [_urlList addObject:@"rtmp://183.146.213.65/live/hks?domain=live.hkstv.hk.lxdns.com"];
     
-#if 0
-    [_urlList addObject:@"http://pili-live-hdl.duimian.cn/loovee/doll_top.flv"];
-    [_urlList addObject:@"http://114.55.127.142:80/g17614640s0t1510127320465SI1u4754539i1.flv"];
-    [_urlList addObject:@"rtmp://pili-publish.wangliangliang.qiniuts.com/wangliangliang-piliwork/57e2234275b62535c30003a7"];
-    [_urlList addObject:@"https://ofmw8vyd3.qnssl.com/1461562925fetch/111.mp4"];
-    [_urlList addObject:@"https://devimages.apple.com.edgekey.net/streaming/examples/bipbop_4x3/bipbop_4x3_variant.m3u8"];
-    [_urlList addObject:@"rtmp://ftv.sun0769.com/dgrtv1/mp4:b1"];
+    // use fast open for loop
+	if(_loopPlayback)
+    {
+        [_urlList addObject:@"http://mus-oss.muscdn.com/reg02/2017/07/06/14/247382630843777024.mp4"];
+        [_urlList addObject:@"http://musically.muscdn.com/reg02/2017/07/05/04/246872853734834176.mp4"];
+        [_urlList addObject:@"http://musically.muscdn.com/reg02/2017/05/31/02/234148590598897664.mp4"];
+        [_urlList addObject:@"http://musically.muscdn.com/reg02/2017/06/29/09/244762267827998720.mp4"];
+        [_urlList addObject:@"http://mus-oss.muscdn.com/reg02/2017/07/02/00/245712223036194816.mp4"];
+        return;
+    }
+
+    [_urlList addObject:@""];
+    [_urlList addObject:@"rtmp://live.hkstv.hk.lxdns.com/live/hks"];
+    [_urlList addObject:@""];
+    [_urlList addObject:@"http://devimages.apple.com/iphone/samples/bipbop/bipbopall.m3u8"];
+    [_urlList addObject:@""];
+    [_urlList addObject:@"rtmp://183.146.213.65/live/hks?domain=live.hkstv.hk.lxdns.com"];
+    [_urlList addObject:@""];
+    [_urlList addObject:@"http://ojpjb7lbl.bkt.clouddn.com/bipbopall.m3u8"];
+    [_urlList addObject:@""];
+    [_urlList addObject:@"http://192.168.0.123/pd/hd.mp4"];
+    [_urlList addObject:@""];
+    
+#if 1
+    [_urlList addObject:@"http://video.mb.moko.cc/2017-11-27/f10f19fe-64a8-4340-bc90-ab59bbafb857.mp4/be0fe625-6d3a-46e2-951d-8aa413df555d/AUTO.m3u8"];
+    [_urlList addObject:@""];
+    [_urlList addObject:@"http://live1-cloud.itouchtv.cn/recordings/z1.touchtv-1.5a24a42fa3d5ec71d6325275@1200k_720p/beea9941d443106ade1518fae7b8b3d6.m3u8"];
+    [_urlList addObject:@"http://live1-cloud.itouchtv.cn/recordings/z1.touchtv-1.5a24a42fa3d5ec71d6325275@1200k_720p/beea9941d443106ade1518fae7b8b3d6.mp4"];
+    [_urlList addObject:@""];
+    [_urlList addObject:@"https://static.xingnl.tv/recordings/z1.xnlzb.67253/1509105606_1509114943.m3u8"];
+    [_urlList addObject:@"https://static.xingnl.tv/o_1bb6c4r3a1aqp1mo5187t1kqr1pagnr.mp4"];
+    [_urlList addObject:@"http://exam.xhbycm.net/test.flv"];
+    [_urlList addObject:@"https://blued-chatfiles.cn-bj.ufileos.com/2017/12/4/11/40/9341416_1512358851210.mp4"];
+    [_urlList addObject:@"http://pili-live-hdl.duimian.cn/loovee/doll_front.flv"];
     [_urlList addObject:@"http://devimages.apple.com/iphone/samples/bipbop/bipbopall.m3u8"];
     [_urlList addObject:@"http://devimages.apple.com/iphone/samples/bipbop/gear4/prog_index.m3u8"];
 #endif
@@ -480,6 +513,7 @@ void NotifyEvent (void * pUserData, int nID, void * pValue1)
     [super viewDidLoad];
     
     //
+    _loopPlayback = NO;
     [self enableAudioSession:YES];
     [self setupUI];
     [self prepareURL];
@@ -520,6 +554,8 @@ void NotifyEvent (void * pUserData, int nID, void * pValue1)
         if(_clipboardURL)
             url = [_clipboardURL UTF8String];
         //_player.SetParam(_player.hPlayer, QCPLAY_PID_DRM_KeyText, (void*)"XXXXXXXXXXXX");
+        _openStartTime = [self getSysTime];
+        NSLog(@"Open start time %d. %d", _openStartTime, [self getSysTime]);
         _player.Open(_player.hPlayer, url, _switchHW.on?QCPLAY_OPEN_VIDDEC_HW:0);
         if(_clipboardURL)
         {
@@ -614,7 +650,10 @@ void NotifyEvent (void * pUserData, int nID, void * pValue1)
             _player.SetParam(_player.hPlayer, QCPLAY_PID_Disable_Video, &nVal);
         }
         else
-        	_player.Run(_player.hPlayer);
+        {
+            _player.Run(_player.hPlayer);
+        }
+        
     }
     else
     {
@@ -967,6 +1006,8 @@ void NotifyEvent (void * pUserData, int nID, void * pValue1)
                 {
                     NSLog(@"+Fast open, %s", newURL);
                     int flag = _switchHW.on?QCPLAY_OPEN_VIDDEC_HW:0;
+                    _openStartTime = [self getSysTime];
+                    NSLog(@"Open start time %d. %d", _openStartTime, [self getSysTime]);
                     _player.Open(_player.hPlayer, newURL, (flag|QCPLAY_OPEN_SAME_SOURCE));
                     NSLog(@"-Fast open");
                     return YES;
@@ -986,6 +1027,27 @@ void NotifyEvent (void * pUserData, int nID, void * pValue1)
     int nProtocol = QC_IOPROTOCOL_HTTPPD;
     _player.SetParam(_player.hPlayer, QCPLAY_PID_Prefer_Protocol, &nProtocol);
 }
+
+-(bool)loopPlayback
+{
+    if(!_loopPlayback)
+        return false;
+    if([_urlList count] <= 0)
+        return false;
+    
+    _currURL++;
+    if(_currURL >= [_urlList count])
+        _currURL = 0;
+    
+    if([self fastOpen:[[_urlList objectAtIndex:_currURL] UTF8String]])
+        return true;
+    
+    [self onStop:_btnStart];
+    [self onStart:_btnStart];
+    
+    return true;
+}
+
 
 -(NSString*)getVersion
 {
