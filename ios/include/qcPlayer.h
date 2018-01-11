@@ -132,7 +132,8 @@ typedef struct
 #define	QCPLAY_PID_StreamInfo		QC_PLAY_BASE + 0X0f
 
 // Set it to zoom video
-// The parameter should RECT *. The pos could be divided by 4 
+// The parameter should RECT *. The pos could be divided by 4
+// set {0, 0, 0, 0} to disable this feature
 #define	QCPLAY_PID_Zoom_Video		QC_PLAY_BASE + 0X11
 
 // Set clock offset time. The parameter int *.
@@ -159,6 +160,10 @@ typedef struct
 // This should be called before open.
 #define	QCPLAY_PID_PD_Save_Path		QC_PLAY_BASE + 0X61
 
+// Set the PD save file ext name. Param should char *
+// This should be called before open.
+#define	QCPLAY_PID_PD_Save_ExtName	QC_PLAY_BASE + 0X62
+
 // Background color for video render. Param should  QC_COLOR *
 // This should be called before open. Default value is black, {0.0, 0.0, 0.0, 1.0}
 #define	QCPLAY_PID_BG_COLOR			QC_PLAY_BASE + 0X71
@@ -174,7 +179,11 @@ typedef struct
 // Get RTMP video message timestamp
 // The parameter should be long long *.
 #define QCPLAY_PID_RTMP_VIDEO_MSG_TIMESTAMP     QC_PLAY_BASE + 0X74
-    
+
+// Get RTSP udp tcp mode. 0 UDP, 1 TCP
+// The parameter should be int *.
+#define QCPLAY_PID_RTSP_UDPTCP_MODE			    QC_PLAY_BASE + 0X81
+
 // Set ext audio render. Internal use.
 // The parameter should be CBaseAudioRnd *.
 #define	QCPLAY_PID_EXT_AudioRnd		QC_PLAY_BASE + 0X0100
@@ -230,6 +239,10 @@ typedef struct
 // Set to call back Audio buffer. It should be set after open before run.
 // The parameter should be function: QCPlayerOutAVData
 #define	QCPLAY_PID_SendOut_AudioBuff		QC_PLAY_BASE + 0X0331
+
+// Set the playback loop or not
+// The parameter should be int *. 0, no loop, 1 loop
+#define	QCPLAY_PID_Playback_Loop			QC_PLAY_BASE + 0X0340
 
 // the video aspect ratio. 
 typedef struct {
