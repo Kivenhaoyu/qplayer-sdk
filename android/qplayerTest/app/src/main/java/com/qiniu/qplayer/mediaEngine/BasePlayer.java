@@ -53,13 +53,21 @@ public interface BasePlayer {
 
 	// Set the seek mode. 0, key frame, 1 any pos. int.
 	public static final int		QCPLAY_PID_Seek_Mode		= 0X11000021;
+	
+	// Set the start position before play. xxx ms. int.
+	public static final int		QCPLAY_PID_START_POS		= 0X11000022;
 
 	// the param shoud null
 	public static final	int 	QCPLAY_PID_Flush_Buffer		= 0X11000025;
 
 	// the param.
 	public static final int 	QCPLAY_PID_Reconnect		= 0X11000030;
-
+	
+	// Set / Get downloading pause or run. The default is run
+	// The param sould be int. 0 run, 1 pause.
+	// This should be called when downloading.
+	public static final int 	QCPLAY_PID_Download_Pause	= 0X11000031;
+	
 	// Set the perfer io protocol. Param should QC_IOPROTOCOL_HTTPPD 
 	// This should be called before open.
 	public static final int 	QCPLAY_PID_Prefer_Protocol	= 0X11000060;
@@ -112,12 +120,43 @@ public interface BasePlayer {
 	// The parameter should be int (ms)
 	public static final int	QCPLAY_PID_PlayBuff_MinTime			= 0X11000212;
 
+	// Add the source in cache.
+	// The parameter should be const char *
+	public static final int	QCPLAY_PID_ADD_Cache				= 0X11000250;
+
+	// Del the source in cache list.
+	// The parameter should be const char *.
+	// If the param is null, delete all cache source.
+	public static final int	QCPLAY_PID_DEL_Cache				= 0X11000251;
+	
+		// Add the source io in cache.
+	// The parameter should be const char *
+	public static final int	QCPLAY_PID_ADD_IOCache				= 0X11000255;
+
+	// Del the source io in cache list.
+	// The parameter should be const char *.
+	// If the param is null, delete all cache source.
+	public static final int	QCPLAY_PID_DEL_IOCache				= 0X11000256;
+
+	// Set the io cache size.
+	// The parameter should be int *.
+	public static final int	QCPLAY_PID_IOCache_Size				= 0X11000257;
+	
+	
 	// Set the log out level
 	// The parameter should be int, 0, None, 1 error, 2 warning, 3 info, 4 debug.
 	public static final int	QCPLAY_PID_Log_Level				= 0X11000320;
 	// Set the DRM key
 	// The parameter should be byte[].
 	public static final int	QCPLAY_PID_DRM_KeyText				= 0X11000301;
+	
+	// Set the pd file key
+	// The parameter should be byte[].
+	public static final int	QCPLAY_PID_FILE_KeyText				= 0X11000302;
+		
+	// Set the mp4 company key
+	// The parameter should be byte[].
+	public static final int	QCPLAY_PID_COMP_KeyText				= 0X11000303;	
 
 	// Set to call back video buffer. It should be set after open before run.
 	// The parameter is 1, it will render outside, 0 render internal
@@ -130,7 +169,11 @@ public interface BasePlayer {
 	// Set to playback or not.
 	// The parameter should be int. 0 not loop, 1 loop.
 	public static final int	QCPLAY_PID_Playback_Loop			= 0X11000340;
-
+	
+	// Set the mp4 preload time
+	// The parameter should be int *. it is ms to preload
+	public static final int	QCPLAY_PID_MP4_PRELOAD				= 0X00000341;
+	
 	// Define id of event listener.
 	public static final int 	QC_MSG_PLAY_OPEN_DONE 			= 0x16000001;
 	public static final int 	QC_MSG_PLAY_OPEN_FAILED 		= 0x16000002;
@@ -156,13 +199,20 @@ public interface BasePlayer {
 	public static final int 	QC_MSG_PLAY_RUN					= 0x1600000C;
 	public static final int 	QC_MSG_PLAY_PAUSE				= 0x1600000D;
 	public static final int 	QC_MSG_PLAY_STOP				= 0x1600000E;
+	public static final int 	QC_MSG_PLAY_LOOP_TIMES			= 0x16000011;
 
+	// the param object is String for source name.
+	public static final int 	QC_MSG_PLAY_CACHE_DONE 			= 0x16000021;
+	public static final int 	QC_MSG_PLAY_CACHE_FAILED 		= 0x16000022;
 
 	// http protocol messaage id
 	public static final int 	QC_MSG_HTTP_CONNECT_START		= 0x11000001;
 	public static final int 	QC_MSG_HTTP_CONNECT_FAILED		= 0x11000002;
 	public static final int 	QC_MSG_HTTP_CONNECT_SUCESS		= 0x11000003;
 	public static final int 	QC_MSG_HTTP_DNS_START			= 0x11000004;
+	public static final int     QC_MSG_HTTP_DNS_GET_CACHE       = 0x11000005;
+    public static final int     QC_MSG_HTTP_DNS_GET_IPADDR      = 0x11000006;
+    public static final int     QC_MSG_HTTP_GET_HEADDATA        = 0x11000010;
 	public static final int 	QC_MSG_HTTP_REDIRECT			= 0x11000012;
 	public static final int 	QC_MSG_HTTP_DISCONNECT_START	= 0x11000021;
 	public static final int 	QC_MSG_HTTP_DISCONNECT_DONE		= 0x11000022;
@@ -181,9 +231,20 @@ public interface BasePlayer {
 	public static final int		QC_MSG_HTTP_RETURN_CODE			= 0x11000023;
 	public static final int		QC_MSG_HTTP_DOWNLOAD_FINISH		= 0x11000060;
 	public static final int		QC_MSG_HTTP_DOWNLOAD_PERCENT	= 0x11000061;
+	// Param: long long bytes
+	public static final int		QC_MSG_HTTP_CONTENT_SIZE		= 0x11000062;
+	public static final int		QC_MSG_HTTP_BUFFER_SIZE			= 0x11000063;	
+	// Param: String
+	public static final int     QC_MSG_HTTP_CONTENT_TYPE        = 0x11000064;
+    public static final int     QC_MSG_HTTP_SEND_BYTE           = 0x11000065;
 	
 	// The obj is the string value
 	public static final int		QC_MSG_RTMP_METADATA			= 0x11010006;
+	//
+    public static final int     QC_MSG_IO_FIRST_BYTE_DONE       = 0x11020001;
+    public static final int     QC_MSG_IO_HANDSHAKE_START       = 0x11020003;
+    public static final int     QC_MSG_IO_HANDSHAKE_FAILED      = 0x11020004;
+    public static final int     QC_MSG_IO_HANDSHAKE_SUCESS      = 0x11020005;
 
 	// The nArg1 is the value.
 	public static final int 	QC_MSG_RTMP_DOWNLOAD_SPEED		= 0x11010004;

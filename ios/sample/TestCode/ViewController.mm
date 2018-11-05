@@ -29,12 +29,15 @@
     UITableView*    _tableViewStreamInfo;
     UISlider*       _sliderPosition;
     UILabel*        _labelPlayingTime;
-    UISwitch*       _switchHW;
-    UILabel*        _labelHW;
+    UISwitch*       _switchCache;
+    UILabel*        _labelCache;
     UISwitch*       _switchSameSource;
     UILabel*        _labelSameSource;
+    UISwitch*       _switchLoop;
+    UILabel*        _labelLoop;
     UILabel*        _labelVersion;
     UIButton*       _btnCancelSelectStream;
+    UIActivityIndicatorView* _waitView;
     
     NSTimer*        _timer;
     
@@ -42,263 +45,45 @@
     
     NSInteger		_networkConnectionErrorTime;
     NSString*		_clipboardURL;
-    BOOL			_loopPlayback;
     int				_openStartTime;
+    int				_firstFrameTime;
+    QC_VIDEO_FORMAT _fmtVideo;
+    long long		_lastPlaybackPos;
+    BOOL			_playbackFromLastPos;
+    BOOL			_useHW;
 }
 @end
 
 @implementation ViewController
-
-#pragma mark Player event callback
-void NotifyEvent (void * pUserData, int nID, void * pValue1)
-{
-    ViewController* vc = (__bridge ViewController*)pUserData;
-    [vc onPlayerEvent:nID withParam:pValue1];
-}
-
-- (void)onPlayerEvent:(int)nID withParam:(void*)pParam
-{
-    //NSLog(@"[EVT]Recv event, %x\n", nID);
-    if (nID == QC_MSG_PLAY_OPEN_DONE)
-    {
-        NSLog(@"Open use time %d. %d", [self getSysTime]-_openStartTime, [self getSysTime]);
-        if(_player.hPlayer)
-        {
-//            int val = 1;
-//            _player.SetParam(_player.hPlayer, QCPLAY_PID_Seek_Mode, &val);
-            _player.Run(_player.hPlayer);
-            //_player.SetVolume(_player.hPlayer, 2000);
-        }
-        
-        [[NSOperationQueue mainQueue] addOperationWithBlock:^{
-            _btnStart.enabled = ![self isLive];
-            _sliderPosition.enabled = ![self isLive];
-        }];
-    }
-    else if(nID == QC_MSG_PLAY_OPEN_FAILED)
-    {
-        NSLog(@"Open use time %d. %d", [self getSysTime]-_openStartTime, [self getSysTime]);
-        [[NSOperationQueue mainQueue] addOperationWithBlock:^{
-            [self showMessage:@"Open fail" duration:2.0];
-            [self loopPlayback];
-        }];
-    }
-    else if (nID == QC_MSG_PLAY_COMPLETE)
-    {
-        int status = *(int*)pParam;
-        NSLog(@"EOS status %d, %lld", status, _player.GetPos(_player.hPlayer));
-        [[NSOperationQueue mainQueue] addOperationWithBlock:^{
-            if(![self loopPlayback])
-                [self onStop: _btnStart];
-        }];
-    }
-    else if (nID == QC_MSG_PLAY_SEEK_DONE)
-    {
-        NSLog(@"[EVT]Seek done\n");
-    }
-    else if (nID == QC_MSG_HTTP_DISCONNECTED || nID == QC_MSG_RTMP_DISCONNECTED)
-    {
-        if(_networkConnectionErrorTime == -1)
-        {
-            NSLog(@"[EVT]Connect lost, %x\n", nID);
-            _networkConnectionErrorTime = [self getSysTime];
-            
-            [[NSOperationQueue mainQueue] addOperationWithBlock:^{
-                [self showMessage:@"Connection loss" duration:5.0];
-            }];
-        }
-    }
-    else if(nID == QC_MSG_HTTP_RECONNECT_FAILED || nID == QC_MSG_RTMP_RECONNECT_FAILED)
-    {
-        NSLog(@"[EVT]Reconnect fail, %x\n", nID);
-    }
-    else if(nID == QC_MSG_RTMP_CONNECT_START || nID == QC_MSG_HTTP_CONNECT_START)
-    {
-        NSLog(@"[EVT]Connect start, %x", nID);
-    }
-    else if (nID == QC_MSG_HTTP_RECONNECT_SUCESS || nID == QC_MSG_RTMP_RECONNECT_SUCESS)
-    {
-        NSLog(@"[EVT]Reconnect success, %x\n", nID);
-        _networkConnectionErrorTime = -1;
-        
-        [[NSOperationQueue mainQueue] addOperationWithBlock:^{
-            [self showMessage:@"Reconnect success" duration:5.0];
-        }];
-    }
-    else if (nID == QC_MSG_HTTP_CONNECT_SUCESS || nID == QC_MSG_RTMP_CONNECT_SUCESS)
-    {
-        NSLog(@"[EVT]Connect success, %x\n", nID);
-    }
-    else if(nID == QC_MSG_SNKV_FIRST_FRAME)
-    {
-        NSLog(@"[EVT]First video frame rendered\n");
-    }
-    else if(nID == QC_MSG_SNKA_FIRST_FRAME)
-    {
-        NSLog(@"[EVT]First audio frame rendered\n");
-    }
-    else if(nID == QC_MSG_SNKV_NEW_FORMAT)
-    {
-        [self updateVideoSize:(QC_VIDEO_FORMAT *)pParam];
-    }
-}
-
--(void)setVideoView:(UIView*)view rect:(RECT*)drawRect
-{
-    if(!_player.hPlayer)
-        return;
-    
-    _player.SetView(_player.hPlayer, (__bridge void*)view, drawRect);
-}
-
-
--(void) destroyPlayer
-{
-    if(!_player.hPlayer)
-        return;
-    qcDestroyPlayer(&_player);
-    _player.hPlayer = NULL;
-}
-
-#pragma mark setup UI
-- (void)parseStream:(NSString *)html
-{
-    NSScanner* theScanner;
-    NSString* text = nil;
-    NSString* keyString = @"?stream=";
-    
-    [_urlList insertObject:@"" atIndex:0];
-    theScanner = [NSScanner scannerWithString:html];
-    
-    while ([theScanner isAtEnd] == NO)
-    {
-        BOOL res = [theScanner scanUpToString:keyString intoString:nil] ;
-        if(res && [theScanner isAtEnd] == NO)
-        {
-            theScanner.scanLocation += [keyString length];
-            res = [theScanner scanUpToString:@"\"" intoString:&text] ;
-            
-            if(text && res)
-            {
-                [_urlList insertObject:[NSString stringWithFormat:@"http://pili-live-hls.pili2test.qbox.net/pili2test/%@.m3u8", text] atIndex:0];
-                [_urlList insertObject:[NSString stringWithFormat:@"http://pili-live-hdl.pili2test.qbox.net/pili2test/%@.flv", text] atIndex:0];
-                [_urlList insertObject:[NSString stringWithFormat:@"rtmp://pili-live-rtmp.pili2test.qbox.net/pili2test/%@", text] atIndex:0];
-            }
-        }
-    }
-}
-
--(void)parseDemoLive
-{
-    //return;
-    NSString *host = @"http://pili2-demo.qiniu.com";
-    NSString *method = @"GET";
-    
-    NSString *url = [NSString stringWithFormat:@"%@",  host];
-    
-    NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:[NSURL URLWithString: url]  cachePolicy:NSURLRequestReloadIgnoringLocalCacheData  timeoutInterval:  5];
-    request.HTTPMethod  =  method;
-    NSURLSession *requestSession = [NSURLSession sessionWithConfiguration:[NSURLSessionConfiguration defaultSessionConfiguration]];
-    NSURLSessionDataTask *task = [requestSession dataTaskWithRequest:request
-                                                   completionHandler:^(NSData * _Nullable body , NSURLResponse * _Nullable response, NSError * _Nullable error) {
-                                                       if(response && body)
-                                                       {
-                                                           NSString *bodyString = [[NSString alloc] initWithData:body encoding:NSUTF8StringEncoding];
-                                                           //NSLog(@"Response body: %@" , bodyString);
-                                                           [self parseStream:bodyString];
-                                                           [[NSOperationQueue mainQueue] addOperationWithBlock:^{
-                                                               [_tableViewURL reloadData];
-                                                           }];
-                                                           bodyString = nil;
-                                                           //[bodyString release];
-                                                       }
-                                                       else
-                                                       {
-                                                           [self parseDemoLive];
-                                                       }
-                                                   }];
-    [task resume];
-}
-
--(void) createPlayer
-{
-    if(_player.hPlayer)
-        return;
-    
-    qcCreatePlayer(&_player, NULL);
-    _player.SetNotify(_player.hPlayer, NotifyEvent, (__bridge void*)self);
-    
-    //    CGRect r = _viewVideo.bounds;
-    //    RECT drawRect = {(int)r.origin.x, (int)r.origin.y, (int)r.size.width, (int)r.size.height};
-    //    _player.SetView(_player.hPlayer, (__bridge void*)_viewVideo, &drawRect);
-    _player.SetView(_player.hPlayer, (__bridge void*)_viewVideo, NULL);
-    
-//    char* val = "127.0.0.1";
-//    _player.SetParam(_player.hPlayer, QCPLAY_PID_DNS_SERVER, (void*)val);
-    
-    //    int nProtocol = QC_PARSER_M3U8;
-    //    _player.SetParam(_player.hPlayer, QCPLAY_PID_Prefer_Format, &nProtocol);
-    
-//    int loop = 1;
-//    _player.SetParam(_player.hPlayer, QCPLAY_PID_Playback_Loop, &loop);
-    
-
-//    [self enableFileCacheMode];
-}
-
 -(void)prepareURL
 {
     if(_urlList)
-    	[_urlList removeAllObjects];
+        [_urlList removeAllObjects];
     else
-    	_urlList = [[NSMutableArray alloc] init];
+        _urlList = [[NSMutableArray alloc] init];
     
     _currURL = 0;
     _clipboardURL = nil;
 
-    [_urlList addObject:@"http://down.ttdtweb.com/test/Horrible.mp4"];
     [_urlList addObject:@""];
-    [_urlList addObject:@"rtmp://live.hkstv.hk.lxdns.com/live/hks"];
-    [_urlList addObject:@""];
-    [_urlList addObject:@"http://192.168.0.123/pd/058-EminemiPodAd.mp4"];
-    [_urlList addObject:@""];
-    [_urlList addObject:@"http://192.168.0.123/pd/dump.mp4"];
-    [_urlList addObject:@""];
-    [_urlList addObject:@"http://devimages.apple.com/iphone/samples/bipbop/bipbopall.m3u8"];
-    [_urlList addObject:@""];
-    [_urlList addObject:@"rtmp://183.146.213.65/live/hks?domain=live.hkstv.hk.lxdns.com"];
-    [_urlList addObject:@""];
-    [_urlList addObject:@"http://ojpjb7lbl.bkt.clouddn.com/bipbopall.m3u8"];
-    [_urlList addObject:@""];
-    [_urlList addObject:@"https://www.gtbluesky.com/test.mp3"];
-    [_urlList addObject:@""];
-    [_urlList addObject:@"rtmp://ftv.sun0769.com/dgrtv1/mp4:b1"];
-    [_urlList addObject:@""];
-    [_urlList addObject:@"rtmp://www.scbtv.cn/live/new"];
-    [_urlList addObject:@""];
-    
-#if 1
-    [_urlList addObject:@"rtmp://pili-live-rtmp.live-dev.edusoho.cn/live-dev-live/55bae139b4324a4b60554c17581c4724"];
-    [_urlList addObject:@"http://vlivehls.people.com.cn/2010/lh2018/hls/live_600.m3u8"];
     [_urlList addObject:@"-------------------------------------------------------------------------------"];
-    [_urlList addObject:@"http://mus-oss.muscdn.com/reg02/2017/07/06/14/247382630843777024.mp4"];
-    [_urlList addObject:@"http://musically.muscdn.com/reg02/2017/07/05/04/246872853734834176.mp4"];
-    [_urlList addObject:@"http://musically.muscdn.com/reg02/2017/05/31/02/234148590598897664.mp4"];
-    [_urlList addObject:@"http://musically.muscdn.com/reg02/2017/06/29/09/244762267827998720.mp4"];
-    [_urlList addObject:@"http://mus-oss.muscdn.com/reg02/2017/07/02/00/245712223036194816.mp4"];
-    [_urlList addObject:@"http://180.153.100.199/bipbopall.m3u8?domain=ojpjb7lbl.bkt.clouddn.com"];
-    [_urlList addObject:@"https://oigovwije.qnssl.com/shfpahbclahjbdoa.mp4"];
-    [_urlList addObject:@"http://gslb.miaopai.com/stream/E26J9j~FuMDu0lX--GALbHiXg~LEH0wrGDyv4w__.mp4"];
-    [_urlList addObject:@"http://live1-cloud.itouchtv.cn/recordings/z1.touchtv-1.5a24a42fa3d5ec71d6325275@1200k_720p/beea9941d443106ade1518fae7b8b3d6.m3u8"];
-    [_urlList addObject:@"http://live1-cloud.itouchtv.cn/recordings/z1.touchtv-1.5a24a42fa3d5ec71d6325275@1200k_720p/beea9941d443106ade1518fae7b8b3d6.mp4"];
-    [_urlList addObject:@""];
-    [_urlList addObject:@"https://static.xingnl.tv/recordings/z1.xnlzb.67253/1509105606_1509114943.m3u8"];
-    [_urlList addObject:@"https://static.xingnl.tv/o_1bb6c4r3a1aqp1mo5187t1kqr1pagnr.mp4"];
-    [_urlList addObject:@"http://exam.xhbycm.net/test.flv"];
-    [_urlList addObject:@"http://pili-live-hdl.duimian.cn/loovee/doll_front.flv"];
+    [_urlList addObject:@"MP4"];
+    [_urlList addObject:@"http://op053v693.bkt.clouddn.com/IMG_3376.MP4"];
+    [_urlList addObject:@"http://demo-videos.qnsdk.com/movies/qiniu.mp4"];
+    [_urlList addObject:@"ROTATE"];
+    [_urlList addObject:@"http://static.zhibojie.tv/1502826524711_1_record.mp4"];
+    [_urlList addObject:@"HLS"];
     [_urlList addObject:@"http://devimages.apple.com/iphone/samples/bipbop/bipbopall.m3u8"];
-    [_urlList addObject:@"http://devimages.apple.com/iphone/samples/bipbop/gear4/prog_index.m3u8"];
-#endif
+    [_urlList addObject:@"HKS"];
+    [_urlList addObject:@"rtmp://live.hkstv.hk.lxdns.com/live/hks"];
+    [_urlList addObject:@"http://fms.cntv.lxdns.com/live/flv/channel84.flv"];
+    [_urlList addObject:@"http://live.hkstv.hk.lxdns.com/live/hks/playlist.m3u8"];
+    [_urlList addObject:@"http://zhibo.hkstv.tv/livestream/mutfysrq/playlist.m3u8"];
+    [_urlList addObject:@"rtmp://183.146.213.65/live/hks?domain=live.hkstv.hk.lxdns.com"];
+    [_urlList addObject:@"HD Live"];
+    [_urlList addObject:@"http://stream1.hnntv.cn/lywsgq/sd/live.m3u8"];
+    [_urlList addObject:@"http://skydvn-nowtv-atv-prod.skydvn.com/atv/skynews/1404/live/07.m3u8"];
+    [_urlList addObject:@""];
     
     NSString* docPathDir = [NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES) objectAtIndex:0];
     NSLog(@"%@", docPathDir);
@@ -319,8 +104,220 @@ void NotifyEvent (void * pUserData, int nID, void * pValue1)
             [_urlList addObject:[NSString stringWithFormat:@"%@/%@", docPathDir, fileName]];
     }
     
-    [self parseDemoLive];
+    //[self parseDemoLive];
 }
+
+#pragma mark Player event callback
+void NotifyEvent (void * pUserData, int nID, void * pValue1)
+{
+    ViewController* vc = (__bridge ViewController*)pUserData;
+    [vc onPlayerEvent:nID withParam:pValue1];
+}
+
+- (void)onPlayerEvent:(int)nID withParam:(void*)pParam
+{
+    //NSLog(@"[EVT]Recv event, %x\n", nID);
+    if (nID == QC_MSG_PLAY_OPEN_DONE)
+    {
+        NSLog(@"Open use time %d. %d", [self getSysTime]-_openStartTime, [self getSysTime]);
+//        return;
+        if(_player.hPlayer)
+        {
+#if 0
+            int val = 1;
+            _player.SetParam(_player.hPlayer, QCPLAY_PID_Seek_Mode, &val);
+            _lastPlaybackPos = rand() % _player.GetDur(_player.hPlayer);
+#endif
+            if(_playbackFromLastPos && _lastPlaybackPos > 0)
+                _player.SetPos(_player.hPlayer, _lastPlaybackPos);
+            else
+                _player.Run(_player.hPlayer);
+        }
+        
+        [[NSOperationQueue mainQueue] addOperationWithBlock:^{
+            _btnStart.enabled = ![self isLive];
+            _sliderPosition.enabled = ![self isLive];
+//            _player.SetPos(_player.hPlayer, 60000);
+        }];
+    }
+    else if(nID == QC_MSG_PLAY_OPEN_FAILED)
+    {
+        NSLog(@"Open use time %d. %d", [self getSysTime]-_openStartTime, [self getSysTime]);
+        [[NSOperationQueue mainQueue] addOperationWithBlock:^{
+            [self showMessage:@"Open fail" duration:2.0];
+            [_switchCache setHidden:NO];
+            [_labelCache setHidden:NO];
+        }];
+    }
+    else if (nID == QC_MSG_PLAY_SEEK_DONE)
+    {
+        NSLog(@"[EVT]Seek done\n");
+        if(_playbackFromLastPos && _lastPlaybackPos > 0)
+        {
+            _player.Run(_player.hPlayer);
+            _lastPlaybackPos = -1;
+        }
+    }
+    else if (nID == QC_MSG_PLAY_COMPLETE)
+    {
+        int status = *(int*)pParam;
+        NSLog(@"EOS status %d, %lld", status, _player.GetPos(_player.hPlayer));
+        [[NSOperationQueue mainQueue] addOperationWithBlock:^{
+            [self onStop: _btnStart];
+        }];
+    }
+    else if (nID == QC_MSG_HTTP_DISCONNECTED || nID == QC_MSG_RTMP_DISCONNECTED)
+    {
+        if(_networkConnectionErrorTime == -1)
+        {
+            NSLog(@"[EVT]Connect lost, %x\n", nID);
+            _networkConnectionErrorTime = [self getSysTime];
+            
+            [[NSOperationQueue mainQueue] addOperationWithBlock:^{
+                [self showMessage:@"Connection loss" duration:5.0];
+            }];
+        }
+    }
+    else if(nID == QC_MSG_HTTP_RECONNECT_FAILED || nID == QC_MSG_RTMP_RECONNECT_FAILED)
+    {
+        NSLog(@"[EVT]Reconnect fail, %x\n", nID);
+    }
+    else if(nID == QC_MSG_RTMP_CONNECT_START || nID == QC_MSG_HTTP_CONNECT_START)
+    {
+        NSLog(@"[EVT]Connect start, %x\n", nID);
+    }
+    else if (nID == QC_MSG_HTTP_CONNECT_SUCESS || nID == QC_MSG_RTMP_CONNECT_SUCESS)
+    {
+        NSLog(@"[EVT]Connect success, %x\n", nID);
+    }
+    else if (nID == QC_MSG_HTTP_RECONNECT_SUCESS || nID == QC_MSG_RTMP_RECONNECT_SUCESS)
+    {
+        NSLog(@"[EVT]Reconnect success, %x\n", nID);
+        _networkConnectionErrorTime = -1;
+        
+        [[NSOperationQueue mainQueue] addOperationWithBlock:^{
+            [self showMessage:@"Reconnect success" duration:5.0];
+            if(_waitView)
+                [_waitView stopAnimating];
+        }];
+    }
+    else if(nID == QC_MSG_SNKV_FIRST_FRAME)
+    {
+        NSLog(@"[EVT]First video frame rendered\n");
+        if(pParam)
+        	_firstFrameTime = *(int*)pParam;
+    }
+    else if(nID == QC_MSG_SNKA_FIRST_FRAME)
+    {
+        NSLog(@"[EVT]First audio frame rendered\n");
+    }
+    else if(nID == QC_MSG_SNKV_NEW_FORMAT)
+    {
+        memcpy(&_fmtVideo, pParam, sizeof(QC_VIDEO_FORMAT));
+        [self updateVideoSize:(QC_VIDEO_FORMAT *)pParam];
+    }
+    else if(nID == QC_MSG_HTTP_BUFFER_SIZE)
+    {
+        //NSLog(@"[EVT]Buffer size %lld\n", *(long long*)pParam);
+    }
+    else if(nID == QC_MSG_PLAY_CAPTURE_IMAGE)
+    {
+        NSLog(@"Capture data ready\n");
+        QC_DATA_BUFF* pData = (QC_DATA_BUFF*)pParam;
+        NSArray *paths = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES);
+        NSString *filePath = [[paths objectAtIndex:0] stringByAppendingString:@"/capture.jpg"];
+        [[NSFileManager defaultManager] createFileAtPath:filePath contents:[NSData dataWithBytes:pData->pBuff length:pData->uSize] attributes:nil];
+    }
+    else if (nID == QC_MSG_BUFF_START_BUFFERING)
+    {
+        NSLog(@"START_BUFFERING\n");
+        [[NSOperationQueue mainQueue] addOperationWithBlock:^{
+            if(_waitView)
+                [_waitView startAnimating];
+        }];
+    }
+    else if (nID == QC_MSG_BUFF_END_BUFFERING)
+    {
+        NSLog(@"END_BUFFERING\n");
+        [[NSOperationQueue mainQueue] addOperationWithBlock:^{
+            if(_waitView)
+                [_waitView stopAnimating];
+        }];
+    }
+}
+
+-(void) destroyPlayer
+{
+    if(!_player.hPlayer)
+        return;
+    qcDestroyPlayer(&_player);
+    _player.hPlayer = NULL;
+}
+
+#pragma mark setup UI
+
+-(void) createPlayer
+{
+    if(_player.hPlayer)
+        return;
+    
+    qcCreatePlayer(&_player, NULL);
+#if 0
+    int log = 5;
+    _player.SetParam(_player.hPlayer, QCPLAY_PID_Log_Level, (void*)&log);
+#endif
+    _player.SetNotify(_player.hPlayer, NotifyEvent, (__bridge void*)self);
+    _player.SetView(_player.hPlayer, (__bridge void*)_viewVideo, NULL);
+
+    
+    
+#if 0
+    char* val = "127.0.0.1";
+    _player.SetParam(_player.hPlayer, QCPLAY_PID_DNS_SERVER, (void*)val);
+#endif
+    
+#if 0
+    int nProtocol = QC_PARSER_M3U8;
+    _player.SetParam(_player.hPlayer, QCPLAY_PID_Prefer_Format, &nProtocol);
+#endif
+    
+#if 0
+    _player.SetParam(_player.hPlayer, QCPLAY_PID_DNS_DETECT, (void*)"live.hkstv.hk.lxdns.com");
+#endif
+    
+#if 0
+    int preLoadTime = 8000*10000;
+    _player.SetParam(_player.hPlayer, QCPLAY_PID_MP4_PRELOAD, &preLoadTime);
+#endif
+    
+#if 0
+    int mode = 1;
+    _player.SetParam(_player.hPlayer, QCPLAY_PID_Seek_Mode, &mode);
+#endif
+    
+#if 0
+    //unsigned char key[16] = {0x64,0x48,0x38,0x6a,0x71,0x53,0x68,0x78,0x57,0x43,0x4a,0x4e,0x70,0x77,0x6c,0x78};
+    char* key = (char*)"dH8jqShxWCJNpwlx";
+    _player.SetParam(_player.hPlayer, QCPLAY_PID_DRM_KeyText, (void*)key);
+#endif
+    
+#if 0
+    char* url = (char*)"http://op053v693.bkt.clouddn.com/IMG_3376.MP4";
+    _player.SetParam(_player.hPlayer, QCPLAY_PID_ADD_Cache, (void*)url);
+    url = (char*)"http://demo-videos.qnsdk.com/movies/qiniu.mp4";
+    _player.SetParam(_player.hPlayer, QCPLAY_PID_ADD_Cache, (void*)url);
+    url = (char*)"http://op053v693.bkt.clouddn.com/qiniu_960x540.mp4";
+    _player.SetParam(_player.hPlayer, QCPLAY_PID_ADD_Cache, (void*)url);
+    url = (char*)"http://op053v693.bkt.clouddn.com/qiniu_480x270.mp4";
+    _player.SetParam(_player.hPlayer, QCPLAY_PID_ADD_Cache, (void*)url);
+#endif
+    
+#if 0
+    char* value = (char*)"User-Agent:APPLE_iPhone7,1_iOS11.4.1;59EA6724-4D2D-4055-A755-4B507B691687;";
+    _player.SetParam(_player.hPlayer, QCPLAY_PID_HTTP_HeadUserAgent, (void*)value);
+#endif
+}
+
 
 -(void)setupUI
 {
@@ -338,11 +335,11 @@ void NotifyEvent (void * pUserData, int nID, void * pValue1)
     
     
     // Video view
-    _rectFullScreen = self.view.bounds;
-    _rectFullScreen.size.width = self.view.bounds.size.height;
-    _rectFullScreen.size.height = self.view.bounds.size.width;
+    _rectFullScreen = self.view.frame;
+    _rectFullScreen.size.width = self.view.frame.size.height;
+    _rectFullScreen.size.height = self.view.frame.size.width;
     
-    _rectSmallScreen = self.view.bounds;
+    _rectSmallScreen = self.view.frame;
     _rectSmallScreen.size.height /= 3;
     _rectSmallScreen.origin.y = 0;
     _viewVideo = [[UIView alloc] initWithFrame:_rectSmallScreen];
@@ -354,6 +351,7 @@ void NotifyEvent (void * pUserData, int nID, void * pValue1)
     _sliderPosition = [[UISlider alloc] initWithFrame:CGRectMake(0, _rectSmallScreen.origin.y+_rectSmallScreen.size.height - 40, _rectSmallScreen.size.width, 20)];
     [_sliderPosition addTarget:self action:@selector(onPositionChange:) forControlEvents:UIControlEventTouchUpInside];
     [_sliderPosition addTarget:self action:@selector(onPositionChangeBegin:) forControlEvents:UIControlEventTouchDown];
+    
     _sliderPosition.minimumValue = 0.0;
     _sliderPosition.maximumValue = 1.0;
     [_sliderPosition setThumbImage:[UIImage imageNamed:@"seekbar.png"] forState:UIControlStateNormal];
@@ -365,7 +363,7 @@ void NotifyEvent (void * pUserData, int nID, void * pValue1)
     NSLayoutConstraint *contraint4 = [NSLayoutConstraint constraintWithItem:_sliderPosition attribute:NSLayoutAttributeRight relatedBy:NSLayoutRelationEqual toItem:_viewVideo attribute:NSLayoutAttributeRight multiplier:1.0 constant:-5.0];
     NSArray* array = [NSArray arrayWithObjects:contraint2, contraint3, contraint4, nil, nil, nil];
     [_viewVideo addConstraints:array];
-    
+
     _tapGesture = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(actionTapGesture:)];
     [_sliderPosition addGestureRecognizer:_tapGesture];
     
@@ -384,45 +382,59 @@ void NotifyEvent (void * pUserData, int nID, void * pValue1)
     array = [NSArray arrayWithObjects:contraint3, contraint4, nil, nil, nil, nil];
     [_viewVideo addConstraints:array];
     
-    // Cache for MP4
+    // Fast open
     width = 80;
-    _switchSameSource = [[UISwitch alloc] initWithFrame:CGRectMake(_rectSmallScreen.size.width - width +20, _rectSmallScreen.origin.y + 90, width, 20)];
+    _switchSameSource = [[UISwitch alloc] initWithFrame:CGRectMake(_rectSmallScreen.size.width - width +20, _rectSmallScreen.origin.y + 100, width, 20)];
     _switchSameSource.on = NO;
     [_viewVideo addSubview:_switchSameSource];
     
     width = 80;
     _labelSameSource = [[UILabel alloc] initWithFrame:CGRectMake(_switchSameSource.frame.origin.x - width, _switchSameSource.frame.origin.y, width, 20)];
-    _labelSameSource.text = @"Same SRC:";
+    _labelSameSource.text = @"Fast Mode:";
     _labelSameSource.font = [UIFont systemFontOfSize:15];
     _labelSameSource.textColor = [UIColor redColor];
     [_viewVideo addSubview:_labelSameSource];
     
-    //Switch HW and SW
+    //Switch Cache
     width = 80;
-    _switchHW = [[UISwitch alloc] initWithFrame:CGRectMake(_rectSmallScreen.size.width - _labelPlayingTime.frame.size.width - width, _rectSmallScreen.origin.y + 50, width, 20)];
-    _switchHW.on = NO;
-    [_viewVideo addSubview:_switchHW];
+    _switchCache = [[UISwitch alloc] initWithFrame:CGRectMake(_rectSmallScreen.size.width - _labelPlayingTime.frame.size.width - width, _rectSmallScreen.origin.y + 60, width, 20)];
+    _switchCache.on = NO;
+    [_viewVideo addSubview:_switchCache];
     // layout contraits
-    [_switchHW setTranslatesAutoresizingMaskIntoConstraints:NO];
-//    contraint2 = [NSLayoutConstraint constraintWithItem:_switchHW attribute:NSLayoutAttributeLeft relatedBy:NSLayoutRelationEqual toItem:_viewVideo attribute:NSLayoutAttributeLeft multiplier:1.0 constant:5.0];
-    contraint3 = [NSLayoutConstraint constraintWithItem:_switchHW attribute:NSLayoutAttributeBottom relatedBy:NSLayoutRelationEqual toItem:_viewVideo attribute:NSLayoutAttributeTop multiplier:1.0 constant:80.0];
-    contraint4 = [NSLayoutConstraint constraintWithItem:_switchHW attribute:NSLayoutAttributeRight relatedBy:NSLayoutRelationEqual toItem:_viewVideo attribute:NSLayoutAttributeRight multiplier:1.0 constant:-10.0];
+    [_switchCache setTranslatesAutoresizingMaskIntoConstraints:NO];
+//    contraint2 = [NSLayoutConstraint constraintWithItem:_switchCache attribute:NSLayoutAttributeLeft relatedBy:NSLayoutRelationEqual toItem:_viewVideo attribute:NSLayoutAttributeLeft multiplier:1.0 constant:5.0];
+    contraint3 = [NSLayoutConstraint constraintWithItem:_switchCache attribute:NSLayoutAttributeBottom relatedBy:NSLayoutRelationEqual toItem:_viewVideo attribute:NSLayoutAttributeTop multiplier:1.0 constant:90.0];
+    contraint4 = [NSLayoutConstraint constraintWithItem:_switchCache attribute:NSLayoutAttributeRight relatedBy:NSLayoutRelationEqual toItem:_viewVideo attribute:NSLayoutAttributeRight multiplier:1.0 constant:-10.0];
     array = [NSArray arrayWithObjects:contraint3, contraint4, nil, nil, nil, nil];
     [_viewVideo addConstraints:array];
     
-    //Lable HW
+    //Lable Cache
     width = 80;
-    _labelHW = [[UILabel alloc] initWithFrame:CGRectMake(_rectSmallScreen.size.width - width, _rectSmallScreen.origin.y+_rectSmallScreen.size.height + 50, width, 20)];
-    _labelHW.text = @"HW Enable:";
-    _labelHW.font = [UIFont systemFontOfSize:15];
-    _labelHW.textColor = [UIColor redColor];
-    [_viewVideo addSubview:_labelHW];
+    _labelCache = [[UILabel alloc] initWithFrame:CGRectMake(_rectSmallScreen.size.width - width, _switchCache.frame.origin.y, width, 20)];
+    _labelCache.text = @"Cache:";
+    _labelCache.font = [UIFont systemFontOfSize:15];
+    _labelCache.textColor = [UIColor redColor];
+    [_viewVideo addSubview:_labelCache];
     // layout contraits
-    [_labelHW setTranslatesAutoresizingMaskIntoConstraints:NO];
-    contraint3 = [NSLayoutConstraint constraintWithItem:_labelHW attribute:NSLayoutAttributeBottom relatedBy:NSLayoutRelationEqual toItem:_viewVideo attribute:NSLayoutAttributeTop multiplier:1.0 constant:80.0];
-    contraint4 = [NSLayoutConstraint constraintWithItem:_labelHW attribute:NSLayoutAttributeRight relatedBy:NSLayoutRelationEqual toItem:_viewVideo attribute:NSLayoutAttributeRight multiplier:1.0 constant:-80.0];
+    [_labelCache setTranslatesAutoresizingMaskIntoConstraints:NO];
+    contraint3 = [NSLayoutConstraint constraintWithItem:_labelCache attribute:NSLayoutAttributeBottom relatedBy:NSLayoutRelationEqual toItem:_viewVideo attribute:NSLayoutAttributeTop multiplier:1.0 constant:80.0];
+    contraint4 = [NSLayoutConstraint constraintWithItem:_labelCache attribute:NSLayoutAttributeRight relatedBy:NSLayoutRelationEqual toItem:_viewVideo attribute:NSLayoutAttributeRight multiplier:1.0 constant:-80.0];
     array = [NSArray arrayWithObjects:contraint3, contraint4, nil, nil, nil, nil];
     [_viewVideo addConstraints:array];
+
+    // Loop
+    width = 80;
+    _switchLoop = [[UISwitch alloc] initWithFrame:CGRectMake(_rectSmallScreen.size.width - width +20, _rectSmallScreen.origin.y + 20, width, 20)];
+    _switchLoop.on = NO;
+    [_viewVideo addSubview:_switchLoop];
+    
+    width = 80;
+    _labelLoop = [[UILabel alloc] initWithFrame:CGRectMake(_switchSameSource.frame.origin.x - width, _switchLoop.frame.origin.y, width, 20)];
+    _labelLoop.text = @"Loop:";
+    _labelLoop.font = [UIFont systemFontOfSize:15];
+    _labelLoop.textColor = [UIColor redColor];
+    [_viewVideo addSubview:_labelLoop];
+
 
     //Lable version
     width = 80;
@@ -441,9 +453,9 @@ void NotifyEvent (void * pUserData, int nID, void * pValue1)
 
 
     // URL list view
-    CGRect r = self.view.bounds;
-    r.size.height -= _viewVideo.bounds.size.height;
-    r.origin.y = _viewVideo.bounds.size.height;
+    CGRect r = self.view.frame;
+    r.size.height -= _viewVideo.frame.size.height;
+    r.origin.y = _viewVideo.frame.size.height;
     _tableViewURL = [[UITableView alloc]initWithFrame:r style:UITableViewStylePlain];
     _tableViewURL.delegate = self;
     _tableViewURL.dataSource = self;
@@ -456,6 +468,12 @@ void NotifyEvent (void * pUserData, int nID, void * pValue1)
     UIRefreshControl *refreshControl = [[UIRefreshControl alloc] init];
     [refreshControl addTarget:self action:@selector(refreshClick:) forControlEvents:UIControlEventValueChanged];
     [_tableViewURL addSubview:refreshControl];
+    
+    //
+    _waitView = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleWhiteLarge];
+    _waitView.center = CGPointMake(CGRectGetMidX(_rectSmallScreen), CGRectGetMidY(_rectSmallScreen));
+    [_viewVideo addSubview:_waitView];
+    //[_waitView startAnimating];
 }
 
 - (void)refreshClick:(UIRefreshControl *)refreshControl
@@ -543,7 +561,10 @@ void NotifyEvent (void * pUserData, int nID, void * pValue1)
     [super viewDidLoad];
     
     //
-    _loopPlayback = NO;
+    _useHW = NO;
+    _lastPlaybackPos = -1;
+    _playbackFromLastPos = YES;
+    _firstFrameTime = -1;
     [self enableAudioSession:YES];
     [self setupUI];
     [self prepareURL];
@@ -562,20 +583,23 @@ void NotifyEvent (void * pUserData, int nID, void * pValue1)
     
     if(status == QC_PLAY_Pause)
     {
-        [_switchHW setHidden:YES];
-        [_labelHW setHidden:YES];
+        [_switchCache setHidden:YES];
+        [_labelCache setHidden:YES];
         [btn setTitle:@"PAUSE" forState:UIControlStateNormal];
         _player.Run(_player.hPlayer);
     }
     else if(status == QC_PLAY_Run)
     {
-        [_switchHW setHidden:NO];
-        [_labelHW setHidden:NO];
+        [_switchCache setHidden:NO];
+        [_labelCache setHidden:NO];
         [btn setTitle:@"START" forState:UIControlStateNormal];
         _player.Pause(_player.hPlayer);
     }
     else
     {
+        if(_waitView)
+            [_waitView stopAnimating];
+
         [btn setTitle:@"PAUSE" forState:UIControlStateNormal];
         _timer = [NSTimer scheduledTimerWithTimeInterval:100.0/100.0 target:self selector:@selector(onTimer:) userInfo:nil repeats:YES];
         
@@ -583,16 +607,24 @@ void NotifyEvent (void * pUserData, int nID, void * pValue1)
         const char* url = [_urlList[_currURL] UTF8String];
         if(_clipboardURL)
             url = [_clipboardURL UTF8String];
-        //_player.SetParam(_player.hPlayer, QCPLAY_PID_DRM_KeyText, (void*)"XXXXXXXXXXXX");
+        
+        // update options
+        [self updateFileCacheMode];
+        int loop = _switchLoop.on?1:0;
+        _player.SetParam(_player.hPlayer, QCPLAY_PID_Playback_Loop, &loop);
+        
+        [self enablePlaybackFromPosition];
+        
+        memset(&_fmtVideo, 0, sizeof(QC_VIDEO_FORMAT));
         _openStartTime = [self getSysTime];
+        _firstFrameTime = -1;
         NSLog(@"Open start time %d. %d", _openStartTime, [self getSysTime]);
-        _player.Open(_player.hPlayer, url, _switchHW.on?QCPLAY_OPEN_VIDDEC_HW:0);
-        if(_clipboardURL)
-        {
-            _clipboardURL = nil;
-        }
-        [_switchHW setHidden:YES];
-        [_labelHW setHidden:YES];
+
+        _player.Open(_player.hPlayer, url, _useHW?QCPLAY_OPEN_VIDDEC_HW:0);
+        
+        _clipboardURL = nil;
+        [_switchCache setHidden:YES];
+        [_labelCache setHidden:YES];
     }
     
     NSLog(@"-Start");
@@ -606,17 +638,22 @@ void NotifyEvent (void * pUserData, int nID, void * pValue1)
     int useTime = [self getSysTime];
     NSLog(@"+Stop[KPI]");
     
+    if(_waitView)
+        [_waitView stopAnimating];
+
     [((UIButton*)sender) setTitle:@"START" forState:UIControlStateNormal];
     
     [_timer invalidate];
     _timer = nil;
     _player.Stop(_player.hPlayer);
-//    _player.Close(_player.hPlayer);
-//    [self destroyPlayer];
+#if 0
+    _player.Close(_player.hPlayer);
+    [self destroyPlayer];
+#endif
     
     //
-    [_switchHW setHidden:NO];
-    [_labelHW setHidden:NO];
+    [_switchCache setHidden:NO];
+    [_labelCache setHidden:NO];
     [_sliderPosition setValue:0.0];
     [_tableViewStreamInfo removeFromSuperview];
     _tableViewStreamInfo = nil;
@@ -635,18 +672,22 @@ void NotifyEvent (void * pUserData, int nID, void * pValue1)
     
     _isDragSlider = false;
     UISlider* slider = (UISlider *)sender;
-    NSLog(@"Set pos %lld", (long long)((float)_player.GetDur(_player.hPlayer)*slider.value));
-    _player.SetPos(_player.hPlayer, (long long)((float)_player.GetDur(_player.hPlayer)*slider.value));
+    long long newPos = (long long)((float)_player.GetDur(_player.hPlayer)*slider.value);
+    NSLog(@"Set pos %lld, playing time %lld", newPos, _player.GetPos(_player.hPlayer));
+    _player.SetPos(_player.hPlayer, newPos);
 }
 
 - (IBAction)onTimer:(id)sender
 {
     if(!_player.hPlayer)
         return;
-    
     long long pos = _player.GetPos(_player.hPlayer) / 1000;
     long long dur = _player.GetDur(_player.hPlayer) / 1000;
-    //NSLog(@"Pos %lld, duration %lld", _player.GetPos(_player.hPlayer), _player.GetDur(_player.hPlayer));
+    static long long lastPos = 0;
+    if(lastPos == 0)
+        lastPos = _player.GetPos(_player.hPlayer);
+    //NSLog(@"Pos %lld, duration %lld, interval %lld", _player.GetPos(_player.hPlayer), _player.GetDur(_player.hPlayer), _player.GetPos(_player.hPlayer)-lastPos);
+    lastPos = _player.GetPos(_player.hPlayer);;
     if(!_isDragSlider)
     {
         if(dur <= 0)
@@ -654,11 +695,17 @@ void NotifyEvent (void * pUserData, int nID, void * pValue1)
         else
             _sliderPosition.value = (float)pos/(float)dur;
     }
-    
+    //pos = 7741252/1000;
     NSString* strPos = [NSString stringWithFormat:@"%02lld:%02lld:%02lld", pos / 3600, pos % 3600 / 60, pos % 3600 % 60];
     NSString* strDur = [NSString stringWithFormat:@"%02lld:%02lld:%02lld", dur / 3600, dur % 3600 / 60, dur % 3600 % 60];
 
-    _labelPlayingTime.text = [NSString stringWithFormat: @"%@%@%@", strPos, @" / " , strDur];
+    _labelPlayingTime.text = [NSString stringWithFormat: @"%s - %d - %dx%d - %@%@%@", _useHW?"HW":"SW", _firstFrameTime, _fmtVideo.nWidth, _fmtVideo.nHeight, strPos, @" / " , strDur];
+    
+    if(dur > 0)
+    {
+        if(![_sliderPosition isEnabled])
+            _sliderPosition.enabled = YES;
+    }
 }
 
 -(void)onAppActive:(BOOL)active
@@ -683,50 +730,51 @@ void NotifyEvent (void * pUserData, int nID, void * pValue1)
         {
             _player.Run(_player.hPlayer);
         }
-        
     }
     else
     {
         if(isLive)
         {
-            int nVal = _switchHW.enabled?QC_PLAY_VideoDisable_Decoder|QC_PLAY_VideoDisable_Render:QC_PLAY_VideoDisable_Render;
+            int nVal = _useHW?QC_PLAY_VideoDisable_Decoder|QC_PLAY_VideoDisable_Render:QC_PLAY_VideoDisable_Render;
             _player.SetParam(_player.hPlayer, QCPLAY_PID_Disable_Video, &nVal);
         }
         else
-        	_player.Pause(_player.hPlayer);
+        {
+            _player.Pause(_player.hPlayer);
+        }
     }
 }
 
 -(IBAction)onFullScreen:(id)sender
 {
-    //return [self onStop:_btnStart];
     if(!_isFullScreen)
     {
         _isFullScreen = YES;
-        //[[UIDevice currentDevice]setValue:[NSNumber numberWithInteger:UIDeviceOrientationPortrait]  forKey:@"orientation"];
-        [[UIDevice currentDevice]setValue:[NSNumber numberWithInteger:UIDeviceOrientationLandscapeLeft] forKey:@"orientation"];
+        if([self isVideoLandscape])
+        {
+            [[UIDevice currentDevice]setValue:[NSNumber numberWithInteger:UIDeviceOrientationLandscapeLeft] forKey:@"orientation"];
+        }
     }
     else
     {
         _isFullScreen = NO;
-        //[[UIDevice currentDevice]setValue:[NSNumber numberWithInteger:UIDeviceOrientationLandscapeLeft]  forKey:@"orientation"];
-        [[UIDevice currentDevice] setValue:[NSNumber numberWithInteger:UIDeviceOrientationPortrait] forKey:@"orientation"];
+    
+        if([self isVideoLandscape])
+            [[UIDevice currentDevice] setValue:[NSNumber numberWithInteger:UIDeviceOrientationPortrait] forKey:@"orientation"];
     }
     
     [_tableViewURL setHidden:_isFullScreen?YES:NO];
     
-//    [UIView animateWithDuration:1.0 animations:^{
-    
-        if(_player.hPlayer)
+    if(_player.hPlayer)
+    {
+        if([self isVideoLandscape])
+        	_viewVideo.frame = _isFullScreen?_rectFullScreen:_rectSmallScreen;
+        else
         {
-            _viewVideo.frame = _isFullScreen?_rectFullScreen:_rectSmallScreen;
-            CGRect r = _viewVideo.bounds;
-            RECT drawRect = {(int)r.origin.x, (int)r.origin.y, (int)r.size.width, (int)r.size.height};
-            _player.SetView(_player.hPlayer, (__bridge void*)_viewVideo, &drawRect);
+            _viewVideo.frame = _isFullScreen?self.view.frame:_rectSmallScreen;
         }
-        
-//    } completion:^(BOOL finished) {
-//    }];
+        _player.SetView(_player.hPlayer, (__bridge void*)_viewVideo, NULL);
+    }
 }
 
 -(IBAction)onSelectStreamEnd:(id)sender
@@ -741,7 +789,7 @@ void NotifyEvent (void * pUserData, int nID, void * pValue1)
     
     if(status == QC_PLAY_Run)
     {
-        CGRect r = self.view.bounds;
+        CGRect r = self.view.frame;
         
         if(!_tableViewStreamInfo)
         {
@@ -990,7 +1038,7 @@ void NotifyEvent (void * pUserData, int nID, void * pValue1)
     label.font = [UIFont boldSystemFontOfSize:15];
     [showView addSubview:label];
     
-    CGSize videoViewSize = _viewVideo.bounds.size;
+    CGSize videoViewSize = _viewVideo.frame.size;
     
     showView.frame = CGRectMake((screenSize.width - labelSize.width - 20)/2,
                                 videoViewSize.height/2 - labelSize.height/2,
@@ -1006,7 +1054,7 @@ void NotifyEvent (void * pUserData, int nID, void * pValue1)
 
 -(int) getSysTime
 {
-    return [[NSProcessInfo processInfo] systemUptime] * 1000;
+    return ((long long)[[NSProcessInfo processInfo] systemUptime] * 1000) & 0x7FFFFFFF;
 }
 
 -(bool)isLive
@@ -1034,9 +1082,11 @@ void NotifyEvent (void * pUserData, int nID, void * pValue1)
             if(!strncmp(newURL, oldURL, end-oldURL))
             {
                 NSLog(@"+Fast open, %s", newURL);
-                int flag = _switchHW.on?QCPLAY_OPEN_VIDDEC_HW:0;
+                int flag = _useHW?QCPLAY_OPEN_VIDDEC_HW:0;
+                [self updateFileCacheMode];
                 _openStartTime = [self getSysTime];
                 NSLog(@"Open start time %d. %d", _openStartTime, [self getSysTime]);
+                [self enablePlaybackFromPosition];
                 _player.Open(_player.hPlayer, newURL, (flag|QCPLAY_OPEN_SAME_SOURCE));
                 NSLog(@"-Fast open");
                 return YES;
@@ -1047,33 +1097,21 @@ void NotifyEvent (void * pUserData, int nID, void * pValue1)
     return NO;
 }
 
--(void)enableFileCacheMode
+-(void)updateFileCacheMode
 {
-    NSString* docPathDir = [NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES) objectAtIndex:0];
-    docPathDir = [docPathDir stringByAppendingString:@"/cache/"];
-    _player.SetParam(_player.hPlayer, QCPLAY_PID_PD_Save_Path, (void*)[docPathDir UTF8String]);
-    int nProtocol = QC_IOPROTOCOL_HTTPPD;
-    _player.SetParam(_player.hPlayer, QCPLAY_PID_Prefer_Protocol, &nProtocol);
-}
-
--(bool)loopPlayback
-{
-    if(!_loopPlayback)
-        return false;
-    if([_urlList count] <= 0)
-        return false;
-    
-    _currURL++;
-    if(_currURL >= [_urlList count])
-        _currURL = 0;
-    
-    if([self fastOpen:[[_urlList objectAtIndex:_currURL] UTF8String]])
-        return true;
-    
-    [self onStop:_btnStart];
-    [self onStart:_btnStart];
-    
-    return true;
+    if(_switchCache.on)
+    {
+        NSString* docPathDir = [NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES) objectAtIndex:0];
+        docPathDir = [docPathDir stringByAppendingString:@"/cache/"];
+        _player.SetParam(_player.hPlayer, QCPLAY_PID_PD_Save_Path, (void*)[docPathDir UTF8String]);
+        int nProtocol = QC_IOPROTOCOL_HTTPPD;
+        _player.SetParam(_player.hPlayer, QCPLAY_PID_Prefer_Protocol, &nProtocol);
+    }
+    else
+    {
+        int nProtocol = QC_IOPROTOCOL_NONE;
+        _player.SetParam(_player.hPlayer, QCPLAY_PID_Prefer_Protocol, &nProtocol);
+    }
 }
 
 -(bool)updateVideoSize:(QC_VIDEO_FORMAT*)pFmt
@@ -1111,7 +1149,21 @@ void NotifyEvent (void * pUserData, int nID, void * pValue1)
     return true;
 }
 
+- (void)enablePlaybackFromPosition
+{
+#if 0
+    int mode = 1;
+    _player.SetParam(_player.hPlayer, QCPLAY_PID_Seek_Mode, &mode);
+    
+    long long pos = 0x24c610;
+    _player.SetParam(_player.hPlayer, QCPLAY_PID_START_POS, &pos);
+#endif
+}
 
+- (BOOL)isVideoLandscape
+{
+    return _fmtVideo.nWidth >= _fmtVideo.nHeight;
+}
 
 -(NSString*)getVersion
 {
@@ -1126,20 +1178,15 @@ void NotifyEvent (void * pUserData, int nID, void * pValue1)
     return version;
 }
 
-
 #pragma mark Other
-- (void)didReceiveMemoryWarning
-{
-    [super didReceiveMemoryWarning];
-    // Dispose of any resources that can be recreated.
-}
-
 -(void)dealloc
 {
+    [self onStop:nil];
     [self destroyPlayer];
     [self enableAudioSession:NO];
     
     _urlList = nil;
+    _tapGesture = nil;
 }
 
 - (UIStatusBarStyle)preferredStatusBarStyle

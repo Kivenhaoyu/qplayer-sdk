@@ -89,6 +89,15 @@ typedef struct tagRECT
 #endif // __QC_OS_WIN32__
 
 
+#define qcReadUint16(buf)	(unsigned short)((buf[1] << 8) | buf[0])
+#define qcReadUint16BE(buf) (unsigned short)((buf[0] << 8) | buf[1])
+#define qcReadUint32(buf)	(unsigned int)((buf[3] << 24) | (buf[2] << 16) | (buf[1] << 8) | buf[0])
+#define qcReadUint32BE(buf)	(unsigned int)((buf[0] << 24) | (buf[1] << 16) | (buf[2] << 8) | buf[3])
+
+#define QC_MAX_NUM32	0XFFFFFFFF
+#define QC_MAX_NUM64	0XFFFFFFFFFFFFFFFF
+#define QC_MAX_NUM32_S	0X7FFFFFFF
+#define QC_MAX_NUM64_S	0X7FFFFFFFFFFFFFFF
 
 #ifdef __QC_OS_WIN32__
 #pragma warning (disable : 4996)

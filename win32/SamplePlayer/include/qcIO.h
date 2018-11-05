@@ -25,11 +25,10 @@ extern "C" {
 #define QCIO_FLAG_READ_WRITE	(QCIO_FLAG_READ | QCIO_FLAG_WRITE)	/**< read-write pseudo flag */
 #define	QCIO_FLAG_URL			8                                   /**< connect with URL  */
 
-
-#define QCIO_SEEK_SIZE			1
-#define QCIO_SEEK_BEGIN			2
-#define QCIO_SEEK_CUR			3
-#define QCIO_SEEK_END			4
+#define QCIO_SEEK_SIZE			0X1000
+#define QCIO_SEEK_BEGIN			0X2000
+#define QCIO_SEEK_CUR			0X3000
+#define QCIO_SEEK_END			0X4000
 
 #define QCIO_READ_DATA			0X0100
 #define QCIO_READ_HEAD			0X0200
@@ -42,9 +41,27 @@ extern "C" {
 
 #define	QCIO_MAX_CONTENT_LEN	0X7FFFFFFFFFFFFFFF
 
+typedef struct
+{
+	long long	llPos;
+	int			nSize;
+} QCIO_READ_INFO;
+
 // Get the IO source type at special pos 
 // The parameter is pos, it should be long long *. 
 #define	QCIO_PID_SourceType				QC_MOD_IO_BASE + 0X01
+
+// Set the IO Exit read if not ready
+// The parameter is int *.
+#define	QCIO_PID_EXIT_READ				QC_MOD_IO_BASE + 0X02
+
+// Set the ext lib file name
+// The parameter should be char *. 
+#define	QCIO_PID_EXT_LibName			QC_MOD_IO_BASE + 0X03
+
+// Set the file key
+// The parameter is char *.
+#define	QCIO_PID_FILE_KEY				QC_MOD_IO_FILE + 0X01
 
 // Set the http host header 
 // The parameter should be char *. 
@@ -54,10 +71,70 @@ extern "C" {
 // The parameter should be char **.
 #define QCIO_PID_HTTP_CONTENT_TYPE		QC_MOD_IO_HTTP + 0X02
 
-// Set the ext lib file name
-// The parameter should be char *. 
-#define	QCIO_PID_EXT_LibName			QC_MOD_IO_BASE + 0X02
+// Set HTTP notify download percent
+// The parameter should be int *.
+#define QCIO_PID_HTTP_NOTIFYDL_PERCENT	QC_MOD_IO_HTTP + 0X03
+
+// Get HTTP buffer size
+// The parameter not used. return buffer size
+#define QCIO_PID_HTTP_BUFF_SIZE			QC_MOD_IO_HTTP + 0X04
+
+// Set HTTP Stop pos
+// The parameter should be long long *.
+#define QCIO_PID_HTTP_STOP_POS			QC_MOD_IO_HTTP + 0X05
+
+// Set HTTP need sleep when downloading
+// The parameter should be int *.
+#define QCIO_PID_HTTP_NEED_SLEEP		QC_MOD_IO_HTTP + 0X06
+
+// Get HTTP had down or not
+// The parameter should be QCIO_READ_INFO *.
+#define QCIO_PID_HTTP_HAD_DOWNLOAD		QC_MOD_IO_HTTP + 0X07
+
+// Set HTTP PD delete the cache file
+// The parameter should be int * . 1 delete ,0 not
+#define QCIO_PID_HTTP_DEL_FILE			QC_MOD_IO_HTTP + 0X08
+
+// Get HTTP PD save file size
+// The parameter should be long long *
+#define QCIO_PID_HTTP_SAVE_SIZE			QC_MOD_IO_HTTP + 0X09
     
+// Set HTTP Disconnect
+// The parameter.
+#define QCIO_PID_HTTP_DISCONNECT		QC_MOD_IO_HTTP + 0X10
+
+// Set HTTP Reconnect
+// The parameter.
+#define QCIO_PID_HTTP_RECONNECT			QC_MOD_IO_HTTP + 0X12
+
+// Set HTTP Data start pos
+// The parameter, long long *
+#define QCIO_PID_HTTP_DATAPOS			QC_MOD_IO_HTTP + 0X13
+
+// Set HTTP Moov start pos
+// The parameter, long long *
+#define QCIO_PID_HTTP_MOOVPOS			QC_MOD_IO_HTTP + 0X14
+
+// Set HTTP Moov size
+// The parameter, int *
+#define QCIO_PID_HTTP_MOOVSIZE			QC_MOD_IO_HTTP + 0X15
+
+// Set HTTP the memory
+// The parameter, CHTTPIO2*
+#define QCIO_PID_HTTP_COPYMEM			QC_MOD_IO_HTTP + 0X16
+
+// Set HTTP notity message
+// The parameter, int * 0, not notify
+#define QCIO_PID_HTTP_NOTIFY			QC_MOD_IO_HTTP + 0X17
+
+// Set HTTP open cache
+// The parameter, int * 1, Open cache
+#define QCIO_PID_HTTP_OPENCACHE			QC_MOD_IO_HTTP + 0X18
+
+// Set HTTP open cache size
+// The parameter, int * 
+#define QCIO_PID_HTTP_CACHE_SIZE		QC_MOD_IO_HTTP + 0X19
+
 // Get RTMP audio message timestamp
 // The parameter should be long long *.
 #define QCIO_PID_RTMP_AUDIO_MSG_TIMESTAMP     QC_MOD_IO_RTMP + 0X01

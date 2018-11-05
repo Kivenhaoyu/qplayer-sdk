@@ -142,14 +142,24 @@ typedef struct
 #define	QCPLAY_PID_Clock_OffTime	QC_PLAY_BASE + 0X20
 
 // Set the seek mode. 0, key frame, 1 any pos. int *.
-// This should be called after open done event.
+// This can be called anytime
+// But it must be called before open if QCPLAY_PID_START_POS enabled.
 #define	QCPLAY_PID_Seek_Mode		QC_PLAY_BASE + 0X21
+
+// Set the start pos before play. long long *
+// This should be called before open.
+#define	QCPLAY_PID_START_POS		QC_PLAY_BASE + 0X22
 
 // Set. Flush the buffer.
 #define	QCPLAY_PID_Flush_Buffer		QC_PLAY_BASE + 0X25
 
 // Set to reconnect source.
 #define	QCPLAY_PID_Reconnect		QC_PLAY_BASE + 0X30
+
+// Set / Get downloading pause or run. The default is run 
+// The param sould be int * . 0 run, 1 pause.
+// This should be called when downloading. 
+#define	QCPLAY_PID_Download_Pause	QC_PLAY_BASE + 0X31
 
 // Set the perfer file format. Param should QCParserFormat *
 // This should be called before open.
@@ -207,6 +217,10 @@ typedef struct
 // The parameter should be char *. 
 #define	QCPLAY_PID_HTTP_HeadReferer			QC_PLAY_BASE + 0X0205
 
+// Set the http header user-agent
+// The parameter should be char *. for example "User-Agent: QPlayer Engine"
+#define QCPLAY_PID_HTTP_HeadUserAgent       QC_PLAY_BASE + 0X0206
+
 // Set the dns server
 // The parameter should be char *. "127.0.0.1" use local. "0.0.0.0" use default.
 #define	QCPLAY_PID_DNS_SERVER				QC_PLAY_BASE + 0X0208
@@ -214,6 +228,10 @@ typedef struct
 // detect the dns get best IP address
 // The parameter should be char *. "www.qiniu.com"
 #define	QCPLAY_PID_DNS_DETECT				QC_PLAY_BASE + 0X0209
+
+// detect the net work type had changed
+// The parameter none
+#define	QCPLAY_PID_NET_CHANGED				QC_PLAY_BASE + 0X020A
 
 // Set / get the max buffer time
 // The parameter should be int *. (ms)
@@ -223,9 +241,39 @@ typedef struct
 // The parameter should be int *. (ms)
 #define	QCPLAY_PID_PlayBuff_MinTime			QC_PLAY_BASE + 0X0212
 
+// Add the source in cache.
+// The parameter should be const char *
+#define	QCPLAY_PID_ADD_Cache				QC_PLAY_BASE + 0X0250
+
+// Del the source in cache list.
+// The parameter should be const char *. 
+// If the param is null, delete all cache source.
+#define	QCPLAY_PID_DEL_Cache				QC_PLAY_BASE + 0X0251
+
+// Add the source io in cache.
+// The parameter should be const char *
+#define	QCPLAY_PID_ADD_IOCache				QC_PLAY_BASE + 0X0255
+
+// Del the source io in cache list.
+// The parameter should be const char *. 
+// If the param is null, delete all cache source.
+#define	QCPLAY_PID_DEL_IOCache				QC_PLAY_BASE + 0X0256
+
+// Set the io cache size.
+// The parameter should be int *. 
+#define	QCPLAY_PID_IOCache_Size				QC_PLAY_BASE + 0X0257
+
 // Set the DRM key 
 // The parameter should be char *.
 #define	QCPLAY_PID_DRM_KeyText				QC_PLAY_BASE + 0X0301
+
+// Set the file key 
+// The parameter should be char *.
+#define	QCPLAY_PID_FILE_KeyText				QC_PLAY_BASE + 0X0302
+
+// Set the comp key 
+// The parameter should be char *.
+#define	QCPLAY_PID_COMP_KeyText				QC_PLAY_BASE + 0X0303
 
 // Set to capture video image
 // The parameter should be long long * (ms). capture time. 0 is immediatily.
@@ -233,7 +281,7 @@ typedef struct
 #define	QCPLAY_PID_Capture_Image			QC_PLAY_BASE + 0X0310
 
 // Set the log out level
-// The parameter should be int *. 0, None, 1 error, 2 warning, 3 info, 4 debug.
+// The parameter should be int *. 0, None, 1 error, 2 warning, 3 info, 4 debug, 5 dump.
 #define	QCPLAY_PID_Log_Level				QC_PLAY_BASE + 0X0320
 
 // Set to call back video buffer. It should be set after open before run.
@@ -248,9 +296,15 @@ typedef struct
 // The parameter should be int *. 0, no loop, 1 loop
 #define	QCPLAY_PID_Playback_Loop			QC_PLAY_BASE + 0X0340
 
+// Set the mp4 preload time
+// The parameter should be int *. it is ms to preload
+#define	QCPLAY_PID_MP4_PRELOAD				QC_PLAY_BASE + 0X0341
+
 // Set the ai tracking or not
 // The parameter should be int *. 0, disable, 1 enable
 #define	QCPLAY_PID_EXT_AITracking			QC_PLAY_BASE + 0X0350
+
+
 
 // the video aspect ratio.
 typedef struct {
